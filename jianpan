@@ -1,0 +1,160 @@
+/*****************************************************/
+/*BC7281B作为串行键盘显示芯片的程序                  */
+/*									 				 */
+/*									  				 */
+/*											 */
+/*****************************************************/
+#include <REG52.h>
+
+#define    UCHAR                      unsigned char
+#define    UINT                       unsigned int
+
+//*** 函数定义 ***
+void B8279_delay(unsigned char);				// B8279短暂延时
+void write728x(unsigned char, unsigned char);	// 写入到BC728x
+unsigned char read728x(unsigned char);		// 从BC728x读出
+void send_byte(unsigned char);			// B8279发送一个字节
+unsigned char receive_byte(void);			// B8279接收一个字节
+
+//*** 变量及I/O口定义 ***
+unsigned char key_number;
+
+sbit 		B7281_CLK	= P1^5;		// clk 连接于 P1.5
+sbit 		B7281_DAT	= P1^4;		// dat 连接于 P1.4
+sbit 		B7281_KEY	= P3^3;		// key 连接于 P3.3(INT1)
+
+//*** 主程序 ***
+main()
+{
+ 	unsigned char disp[8];		
+	unsigned int tmr;
+	for (tmr=0;tmr<0xffff;tmr++);	// 等待 BC728x 完成复位
+	write728x(0x12,0x80);	// 初始化BC728x为164模式，不反相，键值读出后KEY才变低电平
+	write728x(0x15,0x10);          
+    write728x(0x15,0x00);
+	write728x(0x15,0x20);          
+    write728x(0x15,0x30); 
+	write728x(0x15,0x40);          
+    write728x(0x15,0x50); 
+	write728x(0x15,0x60);          
+    write728x(0x15,0x70);     
+	while (1)
+	{
+		while(B7281_KEY);			// 等待按键
+		key_number=read728x(0x13);	// 读键值
+		
+		disp[7]=disp[6];
+		disp[6]=disp[5];
+		disp[5]=disp[4];
+		disp[4]=disp[3];
+		disp[3]=disp[2];
+		disp[2]=disp[1];
+		disp[1]=disp[0];
+		disp[0]=key_number;
+		write728x(0x15,disp[0]&0x0f);// 在第0位上以HEX译码方式显示键码的低4位
+		write728x(0x15,0x10+(disp[1]&0x0f));// 在第0位上以HEX译码方式显示键码的低4位
+		write728x(0x15,0x20+(disp[2]&0x0f));// 在第0位上以HEX译码方式显示键码的低4位
+		write728x(0x15,0x30+(disp[3]&0x0f));// 在第0位上以HEX译码方式显示键码的低4位
+		write728x(0x15,0x40+(disp[4]&0x0f));// 在第0位上以HEX译码方式显示键码的低4位
+		write728x(0x15,0x50+(disp[5]&0x0f));// 在第0位上以HEX译码方式显示键码的低4位
+		write728x(0x15,0x60+(disp[6]&0x0f));// 在第0位上以HEX译码方式显示键码的低4位
+		write728x(0x15,0x70+(disp[7]&0x0f));// 在第0位上以HEX译码方式显示键码的低4位		 
+	}
+}
+
+// ***********************************************************
+// * 写入BC728X, 第一个参数为目标寄存器地址, 第二个参数为要写入的数据 *
+// ***********************************************************
+void write728x(unsigned char reg_add, unsigned char write_data)
+{
+	send_byte(reg_add);		// 发送寄存器地址
+	send_byte(write_data);	// 发送数据字节
+}
+
+// **********************************************************
+// *      读出 BC728X 内部寄存器的值, 调用参数为寄存器地址        *
+// **********************************************************
+unsigned char read728x(unsigned char reg_add)
+{
+	send_byte(reg_add|0x80);	// 发送读指令(bit7=1)
+	return(receive_byte());	// 接收数据字节并返回
+}
+
+// ***********************************************************
+// *                向 BC728X 发送一个字节                     *
+// ***********************************************************
+void send_byte(unsigned char send_byte)
+{
+	unsigned char bit_counter;
+	B7281_CLK=0;			// 产生一 clk 脉冲
+	//B7281_CLK=0;
+	B7281_CLK=1;
+	do
+	{
+		B7281_CLK=0;			// 发出一 clk 脉冲
+		//B7281_CLK=0;
+		B7281_CLK=1;
+	}while (B7281_DAT);		// 等待 BC728X 输出 dat 低电平响应
+	//B7281_CLK=0;			// 再次输出一 clk 脉冲
+	B7281_CLK=0;
+	B7281_CLK=1;
+	while (!B7281_DAT);		// 等待 BC728X 进入接收状态
+	for (bit_counter=0;bit_counter<8;bit_counter++)
+	{			// 发送 8 个比特
+		if ((send_byte&0x80)==0)
+ 		{
+  			B7281_DAT=0;// 如果待发bit为0, 置 dat 为 0
+  	 	}
+  	 	else
+  	 	{
+  	 		B7281_DAT=1;		// 反之置为 1
+  	  	}
+ 		send_byte=send_byte*2;	// send_byte 左移一位
+		B7281_CLK=0;			// 输出一 clk 脉冲
+		B7281_CLK=0;
+		B7281_CLK=1;
+		B8279_delay(1);		// 短暂延时
+	}
+	B7281_DAT=1;				// 恢复 dat 为高电平
+}
+
+// ************************************************************
+// *                 从 BC728X 接收一个字节                     *
+// ************************************************************
+unsigned char receive_byte(void)
+{
+	unsigned char bit_counter, in_byte;
+	B7281_CLK=0;			// 发出一 clk 脉冲
+	//B7281_CLK=0;
+	B7281_CLK=1;
+
+	while (B7281_DAT);		// 等待 BC728X 响应
+
+	B7281_CLK=0;		// 收到响应, 再发一脉冲等待接收数据
+	//B7281_CLK=0;
+	B7281_CLK=1;
+	for (bit_counter=0;bit_counter<8;bit_counter++)
+	{			// 接收8个bit
+		B8279_delay(1);	// 短暂延时
+		in_byte=in_byte*2;	// in_byte 左移一位
+		if (B7281_DAT)	// 如果 dat 为'1'
+		{
+			in_byte=in_byte|0x01;	// bit0=1
+		}
+		B7281_CLK=0;		// 输出一 clk 脉冲
+		B7281_CLK=0;
+		B7281_CLK=1;
+	}
+	return(in_byte);
+}
+
+// ***********************************************************
+// *  短暂延时程序, 延时时间与参数time成正比, 范围是几个uS到几百个uS *
+// ***********************************************************
+void B8279_delay(unsigned char time)
+{
+	while (time!=0)
+	{
+		time--;
+	}
+}

@@ -1,0 +1,827 @@
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE WACTH
+OBJECT MODULE PLACED IN wacth.OBJ
+COMPILER INVOKED BY: D:\Keil\C51\BIN\C51.EXE wacth.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          
+   2          #include <AT89X51.H>
+   3          #include <delay.h>
+   4          #include <stdio.h>
+   5          #include <intrins.h>
+   6          #define uchar unsigned char
+   7          #define uint  unsigned int
+   8          
+   9          
+  10          
+  11          #define RS    P2_0       
+  12          #define RW    P2_1       
+  13          #define Elcm  P2_7       
+  14          #define SW        P3_6
+  15          
+  16          #define DataPort P0      
+  17          #define Busy    0x80
+  18          #define DIR P1_0
+  19          
+  20          sbit            B7281_CLK       = P1^5;         
+  21          sbit            B7281_DAT       = P1^4;         
+  22          sbit            B7281_KEY       = P3^3;         
+  23          sbit        BEEP = P1^7;
+  24          
+  25          
+  26          void WaitForEnable( void );
+  27          void LcdWriteData( char dataW );
+  28          void LcdWriteCommand( uchar CMD,uchar AttribC ) ;
+  29          void LcdReset( void ) ;
+  30          void DispOneChar(uchar x,uchar y,uchar Wdata)  ;
+  31          void ePutstr(uchar x,uchar y, uchar code *ptr) ;
+  32          void Disp_XY( char posx,char posy);
+  33          void flic(char x,char y, char aaaa);
+  34          
+  35          
+  36          
+  37          void B8279_delay(unsigned char);                                
+  38          void write728x(unsigned char, unsigned char);   
+  39          unsigned char read728x(unsigned char);          
+  40          void send_byte(unsigned char);                  
+  41          unsigned char receive_byte(void);                       
+  42          
+  43          
+  44          void disp_time();
+  45          void set();
+  46          
+  47          
+  48          unsigned char key_number=0xff;
+  49           code char examp1[]="Time:    :  :   Alarm:   :";
+  50           code char stopmo[]="Stop Mode:";
+  51          uchar i=21;
+  52          char sec=0,min=0,hour=0,ahour,amin;
+  53          char ssec,smsec,smin,shour;
+  54          char fflash,count,hourset,minset,secset,ahourset,aminset,setnext,alarm_flag,stop_mode,stop_start,stop_for;
+  55          char newhour1,newhour0,newmin1,newmin0,newsec1,newsec0,anewhour1,anewhour0,anewmin1,anewmin0;
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 2   
+
+  56          
+  57          
+  58          
+  59          
+  60          
+  61          
+  62          
+  63          
+  64          
+  65          
+  66          
+  67          
+  68          
+  69          
+  70          
+  71          void time0(void) interrupt 1
+  72          { 
+  73   1              TH0=0X53;
+  74   1              TL0=0X33;
+  75   1              
+  76   1              if(stop_mode)
+  77   1              {
+  78   2                      if(stop_start)
+  79   2                      {
+  80   3                                              if(i%2 == 0)
+  81   3                                              {
+  82   4                                               smsec++;
+  83   4                                                       if(smsec ==10)
+  84   4                                                       {
+  85   5                                                              smsec=0;
+  86   5                                                              ssec++;
+  87   5                                                              if(ssec == 60)
+  88   5                                                              {
+  89   6                                                                      ssec=0; 
+  90   6                                                                      smin++;
+  91   6                                                                      if(smin == 60)
+  92   6                                                                      {
+  93   7                                                                              smin=0;
+  94   7                                                                              shour++;
+  95   7                                                                              if(shour == 24)
+  96   7                                                                              {
+  97   8                                                                                      shour=0;
+  98   8                                                                              }
+  99   7                                                                      }
+ 100   6                                                              }
+ 101   5                                                       }
+ 102   4                                              }
+ 103   3                              }
+ 104   2              }
+ 105   1              i--;
+ 106   1              if(i==0)
+ 107   1              {
+ 108   2                      i=21;
+ 109   2                      sec++;
+ 110   2                      fflash = (!fflash);
+ 111   2                      if(sec == 60)
+ 112   2                      {
+ 113   3                              sec=0;  
+ 114   3                              min++;
+ 115   3                              if(min == 60)
+ 116   3                              {
+ 117   4                                      min=0;
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 3   
+
+ 118   4                                      hour++;
+ 119   4                                      if(hour == 24)
+ 120   4                                      {
+ 121   5                                              hour=0;
+ 122   5                                      }
+ 123   4                              }
+ 124   3                      }
+ 125   2      
+ 126   2              }
+ 127   1      }
+ 128          
+ 129          
+ 130          
+ 131          void delay1(int ms)
+ 132          {
+ 133   1       unsigned char y;
+ 134   1        while(ms--)
+ 135   1       {
+ 136   2        for(y = 0; y<250; y++)
+ 137   2        {
+ 138   3         _nop_();
+ 139   3         _nop_();
+ 140   3         _nop_();
+ 141   3         _nop_();
+ 142   3        }
+ 143   2       }
+ 144   1      }
+ 145          void delay()
+ 146          {
+ 147   1         uchar j;
+ 148   1         for(j=250;j>0;j--);
+ 149   1      }
+ 150          
+ 151          void beep()
+ 152            {
+ 153   1          unsigned char y;
+ 154   1          for (y=0;y<100;y++)
+ 155   1          {
+ 156   2            delay();
+ 157   2            BEEP=!BEEP;                
+ 158   2          } 
+ 159   1          BEEP=1;                      
+ 160   1              delay1(50);
+ 161   1        }
+ 162          
+ 163          
+ 164          
+ 165          
+ 166          
+ 167          
+ 168          
+ 169          void  Set_Flash(uchar row,uchar col )
+ 170          {
+ 171   1      
+ 172   1         if(fflash)
+ 173   1         { 
+ 174   2                      DispOneChar(row,col,(count|0x30));                           
+ 175   2         }
+ 176   1         else
+ 177   1         {                            
+ 178   2              DispOneChar(row,col,' ');                           
+ 179   2         }
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 4   
+
+ 180   1      }
+ 181          
+ 182          void char_set(uchar row,uchar col, uchar num)
+ 183          {
+ 184   1                      switch (key_number)
+ 185   1                      {
+ 186   2                              case 0:
+ 187   2                                      count = 0;
+ 188   2                                      break;
+ 189   2                              case 1:
+ 190   2                                      count = 1;
+ 191   2                                      break;
+ 192   2                              case 2:
+ 193   2                                      count = 2;
+ 194   2                                      break;
+ 195   2                              case 3:
+ 196   2                                      count = 3;
+ 197   2                                      break;
+ 198   2                              case 4:
+ 199   2                                      count = 4;
+ 200   2                                      break;
+ 201   2                              case 5:
+ 202   2                                      count = 5;
+ 203   2                                      break;
+ 204   2                              case 6:
+ 205   2                                      count = 6;
+ 206   2                                      break;
+ 207   2                              case 7:
+ 208   2                                      count = 7;
+ 209   2                                      break;
+ 210   2                              case 8:
+ 211   2                                      count = 8;
+ 212   2                                      break;
+ 213   2                              case 9:
+ 214   2                                      count = 9;
+ 215   2                                      break;
+ 216   2                      }
+ 217   1                      if(count > num)   count = 0;
+ 218   1               Set_Flash(row,col);
+ 219   1      }
+ 220          
+ 221          
+ 222          
+ 223          
+ 224          
+ 225          
+ 226          
+ 227          void key0() interrupt 2
+ 228          {
+ 229   1                      key_number=read728x(0x13);      
+ 230   1                      beep();
+ 231   1      }
+ 232          
+ 233          
+ 234          
+ 235          
+ 236          
+ 237          
+ 238          
+ 239          void beep_and_disp()
+ 240          {
+ 241   1              beep();
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 5   
+
+ 242   1              if(fflash)
+ 243   1              {
+ 244   2                      DispOneChar(9,1,':');
+ 245   2                      DispOneChar(10,1,((amin/10)|0x30));
+ 246   2                      DispOneChar(11,1,((amin%10)|0x30));
+ 247   2                      DispOneChar(7,1,((ahour/10)|0x30));
+ 248   2                      DispOneChar(8,1,((ahour%10)|0x30));
+ 249   2      
+ 250   2              }
+ 251   1              else
+ 252   1              {
+ 253   2                      DispOneChar(9,1,' ');
+ 254   2                      DispOneChar(10,1,' ');
+ 255   2                      DispOneChar(11,1,' ');
+ 256   2                      DispOneChar(7,1,' ');
+ 257   2                      DispOneChar(8,1,' ');
+ 258   2      
+ 259   2              }
+ 260   1      
+ 261   1                      
+ 262   1      }
+ 263          void disp_alarm()
+ 264          {
+ 265   1                      DispOneChar(9,1,':');
+ 266   1                      DispOneChar(10,1,((amin/10)|0x30));
+ 267   1                      DispOneChar(11,1,((amin%10)|0x30));
+ 268   1                      DispOneChar(7,1,((ahour/10)|0x30));
+ 269   1                      DispOneChar(8,1,((ahour%10)|0x30));
+ 270   1      }
+ 271          
+ 272          void time_compare()
+ 273          {
+ 274   1              if(alarm_flag)
+ 275   1              {
+ 276   2                      if(hour == ahour)
+ 277   2                      {
+ 278   3                              if(min == amin)
+ 279   3                              beep_and_disp(); else disp_alarm();
+ 280   3                      }else disp_alarm();
+ 281   2              }else disp_alarm();
+ 282   1      } 
+ 283          
+ 284          
+ 285          void disp_stop()
+ 286          {
+ 287   1              DispOneChar(15,1,(smsec|0x30));
+ 288   1              DispOneChar(12,1,((ssec/10)|0x30));
+ 289   1              DispOneChar(13,1,((ssec%10)|0x30));
+ 290   1              DispOneChar(9,1,((smin/10)|0x30));
+ 291   1              DispOneChar(10,1,((smin%10)|0x30));
+ 292   1              DispOneChar(6,1,((shour/10)|0x30));
+ 293   1              DispOneChar(7,1,((shour%10)|0x30));
+ 294   1      
+ 295   1      }
+ 296          
+ 297          
+ 298          
+ 299          
+ 300          
+ 301          
+ 302          
+ 303          void main(void)
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 6   
+
+ 304          {
+ 305   1              DelayMs(2000);                    
+ 306   1              SW=0;
+ 307   1              LcdReset();                          
+ 308   1              ePutstr(0,0,examp1); 
+ 309   1      
+ 310   1              TMOD=1;                                         
+ 311   1              TH0=0X53;
+ 312   1              TL0=0X33;                                       
+ 313   1              DIR=1;
+ 314   1              ET0=1;
+ 315   1              IP=0x20;                                                
+ 316   1              EA=1;                                           
+ 317   1              TR0=1;
+ 318   1      
+ 319   1              IT1=1;
+ 320   1              EX1=1;
+ 321   1      
+ 322   1              write728x(0x12,0x80);   
+ 323   1      
+ 324   1      
+ 325   1      
+ 326   1              while(1)                         
+ 327   1              {
+ 328   2      
+ 329   2                      disp_time();
+ 330   2      
+ 331   2                      time_compare();
+ 332   2      
+ 333   2      
+ 334   2      
+ 335   2                      if(key_number == 15)
+ 336   2                      {
+ 337   3                        hourset=1;
+ 338   3                        count = (hour/10);
+ 339   3                      }
+ 340   2      
+ 341   2      
+ 342   2                while(hourset)
+ 343   2                {
+ 344   3                              char_set(7,0,2);
+ 345   3                              if(key_number == 10)
+ 346   3                              {
+ 347   4                                      newhour1=count;
+ 348   4                                      DispOneChar(7,0,(count|0x30));
+ 349   4                                      hourset=0;
+ 350   4                                      setnext = 1;
+ 351   4                                      count = (hour%10);
+ 352   4                              
+ 353   4                                      key_number = 0xff;
+ 354   4                              }
+ 355   3                              while(setnext)
+ 356   3                              {
+ 357   4                                      if(newhour1 == 2)
+ 358   4                                               char_set(8,0,3);
+ 359   4                                      else
+ 360   4                                               char_set(8,0,9);
+ 361   4                                      if(key_number == 10)
+ 362   4                                      {
+ 363   5                                      newhour0=count;
+ 364   5                                      DispOneChar(8,0,(count|0x30));
+ 365   5                                      hour=newhour1*10+newhour0;
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 7   
+
+ 366   5                                      setnext = 0;
+ 367   5                                      minset = 1;
+ 368   5                                      count  = (min/10);
+ 369   5                                      key_number = 0xff;
+ 370   5                                      }
+ 371   4                              }                       
+ 372   3                }
+ 373   2                while(minset)
+ 374   2                {
+ 375   3                              char_set(10,0,5);
+ 376   3                              if(key_number == 10)
+ 377   3                              {
+ 378   4                                      newmin1=count;
+ 379   4                                      DispOneChar(10,0,(count|0x30));
+ 380   4                                      minset=0;
+ 381   4                                      setnext = 1;
+ 382   4                                      count = (min%10);
+ 383   4                              
+ 384   4                                      key_number = 0xff;
+ 385   4                              }
+ 386   3                              while(setnext)
+ 387   3                              {
+ 388   4                                      char_set(11,0,9);
+ 389   4                                      if(key_number == 10)
+ 390   4                                      {
+ 391   5                                      newmin0=count;
+ 392   5                                      DispOneChar(11,0,(count|0x30));
+ 393   5                                      min=newmin1*10+newmin0;
+ 394   5                                      setnext = 0;
+ 395   5                                      secset = 1;
+ 396   5                                      count  = (sec/10);
+ 397   5                                      key_number = 0xff;
+ 398   5                                      }
+ 399   4                              } 
+ 400   3                }
+ 401   2                while(secset)
+ 402   2                {
+ 403   3                              char_set(13,0,5);
+ 404   3                              if(key_number == 10)
+ 405   3                              {
+ 406   4                                      newsec1=count;
+ 407   4                                      DispOneChar(13,0,(count|0x30));
+ 408   4                                      secset=0;
+ 409   4                                      setnext = 1;
+ 410   4                                      count = (sec%10);
+ 411   4                              
+ 412   4                                      key_number = 0xff;
+ 413   4                              }
+ 414   3                              while(setnext)
+ 415   3                              {
+ 416   4                                      char_set(14,0,9);
+ 417   4                                      if(key_number == 10)
+ 418   4                                      {
+ 419   5                                      newsec0=count;
+ 420   5                                      DispOneChar(14,0,(count|0x30));
+ 421   5                                      sec=newsec1*10+newsec0;
+ 422   5                                      setnext = 0;
+ 423   5                                      count  = 0;
+ 424   5                                      key_number = 0xff;
+ 425   5                                      }
+ 426   4                              } 
+ 427   3                }
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 8   
+
+ 428   2      
+ 429   2      
+ 430   2      
+ 431   2      
+ 432   2      
+ 433   2                if(key_number == 14)
+ 434   2                {
+ 435   3                      if(alarm_flag == 0)
+ 436   3                      {
+ 437   4                      alarm_flag =1;
+ 438   4                      DispOneChar(14,1,'"');
+ 439   4      
+ 440   4      
+ 441   4                        ahourset=1;
+ 442   4                        count = (ahour/10);}
+ 443   3                        else
+ 444   3                        {
+ 445   4                        alarm_flag = 0;
+ 446   4                        DispOneChar(14,1,' ');
+ 447   4                        key_number = 0xff;
+ 448   4                        }
+ 449   3                }
+ 450   2                while(ahourset)
+ 451   2                {
+ 452   3                              char_set(7,1,2);
+ 453   3                              if(key_number == 10)
+ 454   3                              {
+ 455   4                                      anewhour1=count;
+ 456   4                                      DispOneChar(7,1,(count|0x30));
+ 457   4                                      ahourset=0;
+ 458   4                                      setnext = 1;
+ 459   4                                      count = (ahour%10);
+ 460   4                              
+ 461   4                                      key_number = 0xff;
+ 462   4                              }
+ 463   3                              while(setnext)
+ 464   3                              {
+ 465   4                                      if(anewhour1 == 2)
+ 466   4                                               char_set(8,1,3);
+ 467   4                                      else
+ 468   4                                               char_set(8,1,9);
+ 469   4                                      if(key_number == 10)
+ 470   4                                      {
+ 471   5                                      anewhour0=count;
+ 472   5                                      DispOneChar(8,1,(count|0x30));
+ 473   5                                      ahour=anewhour1*10+anewhour0;
+ 474   5                                      setnext = 0;
+ 475   5                                      aminset = 1;
+ 476   5                                      count  = (amin/10);
+ 477   5                                      key_number = 0xff;
+ 478   5                                      }
+ 479   4                              } 
+ 480   3                }
+ 481   2                while(aminset)
+ 482   2                {
+ 483   3                              char_set(10,1,5);
+ 484   3                              if(key_number == 10)
+ 485   3                              {
+ 486   4                                      anewmin1=count;
+ 487   4                                      DispOneChar(10,1,(count|0x30));
+ 488   4                                      aminset=0;
+ 489   4                                      setnext = 1;
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 9   
+
+ 490   4                                      count = (amin%10);
+ 491   4                              
+ 492   4                                      key_number = 0xff;
+ 493   4                              }
+ 494   3                              while(setnext)
+ 495   3                              {
+ 496   4                                      char_set(11,1,9);
+ 497   4                                      if(key_number == 10)
+ 498   4                                      {
+ 499   5                                      anewmin0=count;
+ 500   5                                      DispOneChar(11,1,(count|0x30));
+ 501   5                                      amin=anewmin1*10+anewmin0;
+ 502   5                                      setnext = 0;
+ 503   5                                      count  = 0;
+ 504   5                                      key_number = 0xff;
+ 505   5                                      }
+ 506   4                              } 
+ 507   3                }
+ 508   2      
+ 509   2      
+ 510   2      
+ 511   2                if(key_number == 13)
+ 512   2                {
+ 513   3                              key_number=0xff;
+ 514   3                              stop_for =1;
+ 515   3                              stop_mode=1;
+ 516   3                              LcdWriteCommand(0x01,1) ;
+ 517   3                              ePutstr(0,0,stopmo);
+ 518   3                              DispOneChar(14,1,'.');
+ 519   3                              DispOneChar(11,1,':'); 
+ 520   3                              DispOneChar(8,1,':'); 
+ 521   3      
+ 522   3       
+ 523   3                }
+ 524   2                while(stop_for)
+ 525   2                {
+ 526   3                              while(key_number !=13)
+ 527   3                              {
+ 528   4                                      if(key_number == 11)
+ 529   4                                      {
+ 530   5                                              key_number=0xff;
+ 531   5                                              smsec=0;ssec=0;smin=0;shour=0;
+ 532   5                                      }
+ 533   4                                      if(key_number == 12)
+ 534   4                                      {
+ 535   5                                              key_number=0xff;
+ 536   5                                              stop_start = (!stop_start);
+ 537   5                                      }
+ 538   4                                      disp_stop();
+ 539   4                              }
+ 540   3                              key_number=0xff;
+ 541   3                              LcdWriteCommand(0x01,1) ;
+ 542   3                              ePutstr(0,0,examp1);
+ 543   3                              if(alarm_flag)
+ 544   3                                              DispOneChar(14,1,'"');  
+ 545   3                              if(stop_start)
+ 546   3                                      stop_for=0;
+ 547   3                              else
+ 548   3                              {
+ 549   4                                      stop_for=0;
+ 550   4                                      stop_mode = 0; 
+ 551   4                              }
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 10  
+
+ 552   3                }
+ 553   2      
+ 554   2      
+ 555   2      
+ 556   2      
+ 557   2      
+ 558   2      
+ 559   2      
+ 560   2      
+ 561   2      
+ 562   2      
+ 563   2      
+ 564   2      
+ 565   2      
+ 566   2              }
+ 567   1      
+ 568   1       }
+ 569          
+ 570          
+ 571          void disp_time()
+ 572          {
+ 573   1              DispOneChar(13,0,((sec/10)|0x30));
+ 574   1              DispOneChar(14,0,((sec%10)|0x30));
+ 575   1              DispOneChar(10,0,((min/10)|0x30));
+ 576   1              DispOneChar(11,0,((min%10)|0x30));
+ 577   1              DispOneChar(7,0,((hour/10)|0x30));
+ 578   1              DispOneChar(8,0,((hour%10)|0x30));
+ 579   1      }
+ 580          
+ 581          
+ 582          
+ 583          
+ 584          
+ 585          
+ 586          
+ 587          
+ 588          
+ 589          
+ 590          
+ 591          
+ 592          
+ 593          
+ 594          
+ 595          
+ 596          
+ 597          
+ 598          
+ 599          
+ 600          
+ 601          
+ 602          
+ 603          void ePutstr(uchar x,uchar y, uchar code *ptr) {
+ 604   1      uchar i,l=0;
+ 605   1          while (*ptr++ >0){l++;}; 
+ 606   1              ptr=ptr-(l+1);            
+ 607   1          for (i=0;i<l;i++)     { DispOneChar(x++,y,*ptr++);
+ 608   2                                  if ( x == 31 )  { x = 0; y ^= 0; }
+ 609   2                                 }
+ 610   1                                                      }
+ 611          
+ 612          
+ 613          void Disp_XY( char posx,char posy) {
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 11  
+
+ 614   1      
+ 615   1      uchar temp;
+ 616   1      
+ 617   1          temp = posx & 0x0f;
+ 618   1          posy &= 0x1;
+ 619   1          if ( posx>15 )   temp |= 0x40;
+ 620   1              if (posy==1)   temp |=0x40;
+ 621   1          temp |= 0x80;
+ 622   1          LcdWriteCommand(temp,0);
+ 623   1      }
+ 624          
+ 625          void DispOneChar(uchar x,uchar y,uchar Wdata)  {
+ 626   1      
+ 627   1          Disp_XY( x, y );                
+ 628   1          LcdWriteData( Wdata );          
+ 629   1      }
+ 630          
+ 631          void LcdReset( void )  {
+ 632   1      
+ 633   1             LcdWriteCommand( 0x38, 0);           
+ 634   1              DelayMs(10);
+ 635   1          LcdWriteCommand( 0x38, 0);            
+ 636   1              DelayMs(10);
+ 637   1          LcdWriteCommand( 0x38, 0);
+ 638   1              DelayMs(10);
+ 639   1      
+ 640   1          LcdWriteCommand( 0x38, 1);            
+ 641   1          LcdWriteCommand( 0x08, 1);            
+ 642   1          LcdWriteCommand( 0x01, 1);           
+ 643   1          LcdWriteCommand( 0x06, 1);           
+ 644   1          LcdWriteCommand( 0x0c, 1);           
+ 645   1      }
+ 646          
+ 647          void LcdWriteCommand( uchar CMD,uchar AttribC )  {
+ 648   1      
+ 649   1          if (AttribC) WaitForEnable();                
+ 650   1          RS=0; RW=0; _nop_();Elcm=1;
+ 651   1          DataPort=CMD; _nop_();
+ 652   1          Elcm=0;_nop_();_nop_();Elcm=1;           
+ 653   1      }
+ 654          
+ 655          void LcdWriteData( char dataW )  {
+ 656   1      
+ 657   1          WaitForEnable();
+ 658   1      
+ 659   1          RS=1; RW=0; _nop_();Elcm=1;
+ 660   1      
+ 661   1          DataPort=dataW; _nop_();
+ 662   1      
+ 663   1          Elcm=0; _nop_(); _nop_(); Elcm=1;        
+ 664   1      }
+ 665          
+ 666          void WaitForEnable( void ) {
+ 667   1      
+ 668   1          DataPort=0xff;
+ 669   1              RS=0;
+ 670   1              RW=1; 
+ 671   1              _nop_();
+ 672   1              Elcm=0; 
+ 673   1              _nop_();
+ 674   1              _nop_();
+ 675   1      
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 12  
+
+ 676   1          while( DataPort & Busy );
+ 677   1          Elcm=1;
+ 678   1      }
+ 679          
+ 680          
+ 681          
+ 682          
+ 683          
+ 684          
+ 685          
+ 686          
+ 687          
+ 688          
+ 689          
+ 690          
+ 691          
+ 692          
+ 693          
+ 694          
+ 695          
+ 696          
+ 697          
+ 698          
+ 699          
+ 700          
+ 701          
+ 702          
+ 703          
+ 704          
+ 705          void write728x(unsigned char reg_add, unsigned char write_data)
+ 706          {
+ 707   1              send_byte(reg_add);             
+ 708   1              send_byte(write_data);  
+ 709   1      }
+ 710          
+ 711          unsigned char read728x(unsigned char reg_add)
+ 712          {
+ 713   1              send_byte(reg_add|0x80);        
+ 714   1              return(receive_byte()); 
+ 715   1      }
+ 716          
+ 717          void send_byte(unsigned char send_byte)
+ 718          {
+ 719   1              unsigned char bit_counter;
+ 720   1              B7281_CLK=0;            
+ 721   1              B7281_CLK=1;
+ 722   1              do
+ 723   1              {
+ 724   2                      B7281_CLK=0;                    
+ 725   2                      B7281_CLK=1;
+ 726   2              }while (B7281_DAT);     
+ 727   1              B7281_CLK=0;
+ 728   1              B7281_CLK=1;
+ 729   1              while (!B7281_DAT);             
+ 730   1              for (bit_counter=0;bit_counter<8;bit_counter++)
+ 731   1              {                       
+ 732   2                      if ((send_byte&0x80)==0)
+ 733   2                      {
+ 734   3                              B7281_DAT=0;
+ 735   3                      }
+ 736   2                      else
+ 737   2                      {
+C51 COMPILER V9.00   WACTH                                                                 09/02/2013 10:49:34 PAGE 13  
+
+ 738   3                              B7281_DAT=1;    
+ 739   3                      }
+ 740   2                      send_byte=send_byte*2;  
+ 741   2                      B7281_CLK=0;                    
+ 742   2                      B7281_CLK=0;
+ 743   2                      B7281_CLK=1;
+ 744   2                      B8279_delay(1); 
+ 745   2              }
+ 746   1              B7281_DAT=1;                            
+ 747   1      }
+ 748          
+ 749          unsigned char receive_byte(void)
+ 750          {
+ 751   1              unsigned char bit_counter, in_byte;
+ 752   1              B7281_CLK=0;                    
+ 753   1              B7281_CLK=1;
+ 754   1      
+ 755   1              while (B7281_DAT);              
+ 756   1      
+ 757   1              B7281_CLK=0;            
+ 758   1              B7281_CLK=1;
+ 759   1              for (bit_counter=0;bit_counter<8;bit_counter++)
+ 760   1              {                       
+ 761   2                      B8279_delay(1); 
+ 762   2                      in_byte=in_byte*2;      
+ 763   2                      if (B7281_DAT)  
+ 764   2                      {
+ 765   3                              in_byte=in_byte|0x01;
+ 766   3                      }
+ 767   2                      B7281_CLK=0;            
+ 768   2                      B7281_CLK=0;
+ 769   2                      B7281_CLK=1;
+ 770   2              }
+ 771   1              return(in_byte);
+ 772   1      }
+ 773          
+ 774          void B8279_delay(unsigned char time)
+ 775          {
+ 776   1              while (time!=0)
+ 777   1              {
+ 778   2                      time--;
+ 779   2              }
+ 780   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2202    ----
+   CONSTANT SIZE    =     38    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     33      16
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

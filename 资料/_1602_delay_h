@@ -1,0 +1,33 @@
+void DelayMs(unsigned int number) {
+unsigned char temp;
+ for(;number!=0;number--) {
+  for(temp=112;temp!=0;temp--) {
+  }
+ }
+}  
+void Delay_us(unsigned char nUs)//微秒级延时<255us
+{
+	TH0=0;
+	TL0=0;
+	TR0=1;
+	while(TL0<nUs)//利用T0做定时计数器，循环采样，直到达到定时值
+	{
+	}
+	TR0=0;
+}
+
+void Delay_ms(unsigned int nMs)//豪秒级的延时<65535ms
+{
+	unsigned int n=0;
+	TR0=1;
+	while(n<nMs)////利用T0做定时计数器，循环采样，直到达到定时值
+	{
+		TH0=0;
+		TL0=20;
+		while(TH0<4)
+		{
+		}
+		n++;
+	}
+	TR0=0;
+}

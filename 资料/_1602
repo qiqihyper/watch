@@ -1,0 +1,148 @@
+/*======单片机通用实验板液晶屏显示演示程序===========================*/
+
+
+/*[注]:AT89C51的晶振频率为11.0592MHz
+====================================================================*/
+
+/*            ACM1602A （16x2）接线图
+=====================================================================
+连接线图:   ACM-------51     ACM-------51     ACM--------51
+            DB0-----P0.0     DB4-----P0.4     RS-------P2_0
+            DB1-----P0.1     DB5-----P0.5     WR-------P2_1
+            DB2-----P0.2     DB6-----P0.6     E--------P2_7
+            DB3-----P0.3     DB7-----P0.7     BLA------GND
+
+            VLCD接1K电阻到GND
+
+====================================================================*/
+/*阅读本程序之前，请参考光盘上带的LCD1602的工作原理（兄弟科技公司提供）*/
+
+#include <AT89X51.H>
+#include <Delay.h>
+#include <stdio.h>
+#include <Intrins.h>
+#define uchar unsigned char
+#define uint  unsigned int
+// 1602连线
+#define RS    P2_0       //数据/命令选择
+#define RW    P2_1       //读/写选择
+#define Elcm  P2_7       //使能信号
+#define SW	  P3_6
+
+#define DataPort P0      // 数据端口
+#define Busy    0x80
+void WaitForEnable( void );
+void LcdWriteData( char dataW );
+void LcdWriteCommand( uchar CMD,uchar AttribC ) ;
+void LcdReset( void ) ;
+void DispOneChar(uchar x,uchar y,uchar Wdata)  ;
+void ePutstr(uchar x,uchar y, uchar code *ptr) ;
+code char examp[]="Wellcom to play    MCU Board";
+
+
+ void main(void)      {
+    DelayMs(2000);                      //延时使液晶屏复位
+    SW=0;
+    LcdReset();                          //液晶屏初始化
+    ePutstr(0,0,examp);                 // 液晶屏显示一个预定字符串
+    while(1);                           //无限循环。
+	                    }
+
+
+/*=======================================================
+液晶屏上显示字符串
+=======================================================*/
+void ePutstr(uchar x,uchar y, uchar code *ptr) {
+uchar i,l=0;
+    while (*ptr++ >0){l++;}; //统计字符的个数
+	ptr=ptr-(l+1);            //使指针重新指向首个字符
+    for (i=0;i<l;i++)     { DispOneChar(x++,y,*ptr++);
+                            if ( x == 31 )  { x = 0; y ^= 0; }
+                           }
+                                                }
+
+
+/*=======================================================
+显示光标定位
+=======================================================*/
+void Disp_XY( char posx,char posy) {
+
+uchar temp;
+
+    temp = posx & 0x0f;
+    posy &= 0x1;
+    if ( posx>15 )   temp |= 0x40;
+	if (posy==1)   temp |=0x40;
+    temp |= 0x80;
+    LcdWriteCommand(temp,0);
+}
+
+/*=======================================================
+按指定位置显示数出一个字符
+=======================================================*/
+void DispOneChar(uchar x,uchar y,uchar Wdata)  {
+
+    Disp_XY( x, y );                // 定位显示地址
+    LcdWriteData( Wdata );            // 写字符
+}
+
+/*=======================================================
+初始化程序, 必须按照产品资料介绍的初始化过程进行
+=======================================================*/
+void LcdReset( void )  {
+
+       LcdWriteCommand( 0x38, 0);            // 显示模式设置(不检测忙信号)
+        DelayMs(10);
+    LcdWriteCommand( 0x38, 0);            // 共三次
+        DelayMs(10);
+    LcdWriteCommand( 0x38, 0);
+        DelayMs(10);
+
+    LcdWriteCommand( 0x38, 1);            // 显示模式设置(以后均检测忙信号)
+    LcdWriteCommand( 0x08, 1);            // 显示关闭
+    LcdWriteCommand( 0x01, 1);            // 显示清屏
+    LcdWriteCommand( 0x06, 1);            // 显示光标移动设置
+    LcdWriteCommand( 0x0c, 1);            // 显示开及光标设置
+}
+
+/*=======================================================
+写控制字符子程序: E=1 RS=0 RW=0
+=======================================================*/
+void LcdWriteCommand( uchar CMD,uchar AttribC )  {
+
+    if (AttribC) WaitForEnable();                // 检测忙信号?
+    RS=0; RW=0; _nop_();Elcm=1;
+    DataPort=CMD; _nop_();
+    // 送控制字子程序
+    Elcm=0;_nop_();_nop_();Elcm=1;            // 操作允许脉冲信号
+}
+
+/*=======================================================
+当前位置写字符子程序: E =1 RS=1 RW=0
+=======================================================*/
+void LcdWriteData( char dataW )  {
+
+    WaitForEnable();
+        // 检测忙信号
+
+    RS=1; RW=0; _nop_();Elcm=1;
+
+    DataPort=dataW; _nop_();
+
+    Elcm=0; _nop_(); _nop_(); Elcm=1;        // 操作允许脉冲信号
+
+}
+
+/*=======================================================
+正常读写操作之前必须检测LCD控制器状态:    CS=1 RS=0 RW=1
+DB7:    0  LCD控制器空闲; 1  LCD控制器忙
+========================================================*/
+void WaitForEnable( void ) {
+
+    DataPort = 0xff;
+
+    RS=0; RW=1; _nop_();    Elcm=0; _nop_(); _nop_();
+
+    while( DataPort & Busy );
+    Elcm=1;
+}

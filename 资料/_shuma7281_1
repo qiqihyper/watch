@@ -1,0 +1,336 @@
+		  #include <at892051.h>
+
+//*** 函数定义 ***
+void delay(unsigned char);				// 短暂延时
+void write728x(unsigned char, unsigned char);	// 写入到BC728x
+unsigned char read728x(unsigned char);		// 从BC728x读出
+void send_byte(unsigned char);			// 发送一个字节
+unsigned char receive_byte(void);			// 接收一个字节
+void delay10ms(unsigned char);
+void key_int(void);
+
+//*** 变量及I/O口定义 ***
+unsigned char digit[5];
+unsigned char key_number, j;
+unsigned int tmr;
+sbit 		clk	= P1^5;		// clk 连接于 P1.5
+sbit 		dat	= P1^4;		// dat 连接于 P1.4
+sbit 		key	= P3^3;		// key 连接于 P3.3(INT1)
+
+
+//*** 主程序 ***
+main()
+{
+	unsigned char i, disp_data, blink_ctl;
+	delay10ms(20);				// 等待 BC728x 完成复位 (200ms)
+	write728x(0x12,0x88);		// 初始化BC728x为164模式，不反相,BMS=1, KMS=0
+
+	while (1) {
+// ************************ 快速计数测试 ****************************	
+	for (j=0;j<8;j++)
+	{
+		write728x(j,0xc0);		// 直接写入显示寄存器,将0-7位显示为'0'
+	}
+	for (j=0;j<5;j++)			// 计数初始化
+	{
+		digit[j]=0;
+	}
+	while (digit[4]<1)			// 计数最大值10000
+	{
+		if (!key)
+		{
+			key_int();
+		}
+		digit[0]++;				// 个位加1
+		if (digit[0]>9)			// 判断是否有进位
+		{
+			digit[0]=0;			// 有进位，个位清零
+			digit[1]++;			// 十位加一
+			if (digit[1]>9)
+			{
+				digit[1]=0;
+				digit[2]++;
+				if (digit[2]>9)
+				{
+					digit[2]=0;
+					digit[3]++;
+					if (digit[3]>9)
+					{
+						digit[3]=0;
+						digit[4]++;
+					}
+				}
+			}
+		}
+		write728x(0x14,digit[0]);			// 刷新个位
+		if (digit[0]==0)					// 个位是否为零？
+		{
+			write728x(0x14,0x10+digit[1]);	// 个位为零，表示有进位，刷新十位
+			if (digit[1]==0)				// 十位是否为零？
+			{
+				write728x(0x14,0x20+digit[2]);	// 十位为零，刷新百位
+				if (digit[2]==0)
+				{
+					write728x(0x14,0x30+digit[3]);
+					if (digit[3]==0)
+					{
+						write728x(0x15,0x40+digit[4]);
+					}
+				}
+			}
+		}
+	}
+//********************* 寄存器直接读写测试 ************************
+	delay10ms(100);
+	write728x(0x16,0);				// 显示清屏
+	write728x(0x17,0);
+	write728x(0,0xb6);				// 在第0位显示一个‘三’字
+	delay10ms(100);
+	for (i=0;i<0x0f;i++)
+	{
+		disp_data=read728x(i);		// 读显示寄存器
+		write728x(i+1,disp_data);	// 写入下一位
+		write728x(i,0xff);			// 前一位清零
+		delay10ms(15);				// 延时
+	}
+	for (i=0x0f;i>0;i--)
+	{
+		disp_data=read728x(i);		// 读显示寄存器
+		write728x(i-1,disp_data);	// 写入前一位
+		write728x(i,0xff);			// 当前位清零
+		delay10ms(10);				// 延时200ms
+	}
+// ********************* hex 译码测试 *****************************
+	for (i=0;i<0x10;i++)
+	{
+		write728x(0x15,i*16+i);		// 在0-15位分别显示0-F
+		delay10ms(50);				// 延时1s
+	}
+// ********************* 闪烁功能测试 *****************************
+	write728x(0x12,0x80);			// BMS=0
+	blink_ctl=0xff;
+	write728x(0x12,0x80);		
+	for (i=0;i<8;i++)				// 每过一会增加一个闪烁位，直至全部闪烁
+	{
+		blink_ctl=blink_ctl/2;
+		write728x(0x10,blink_ctl);
+		delay10ms(150);
+	}
+	write728x(0x12,0x88);			// 设BC728x为164模式，不反相,BMS=1, KMS=0
+	write728x(0x10,0x5f);			// 第5、7位闪烁
+	delay10ms(150);					// 延时
+	write728x(0x19,0xaf);			// 第12、14位闪烁
+	delay10ms(150);
+	disp_data=read728x(0x11);		// 读出闪烁速度控制寄存器
+	write728x(0,0xff);				// 第0-3位显示清零
+	write728x(1,0xff);
+	write728x(2,0xff);
+	write728x(3,0xff);
+	
+	for (i=disp_data;i>0;i--)		// 闪烁速度测试——速度逐渐加快
+	{
+		write728x(0x15,(i-1)&0x0f);	// 在第0和第1位上输出闪烁速度控制寄存器值
+		write728x(0x15,(((i-1)&0xf0)/16)|0x10);
+		write728x(0x11,i-1);		// 更新闪烁速度寄存器
+		delay10ms(25);				// 延时250ms
+	}
+	delay10ms(200);					// 延时2s
+	
+	for (i=0;i<0xff;i++)			// 闪烁速度测试——速度逐渐减慢
+	{
+		write728x(0x15,(i+1)&0x0f);	// 在第0和第1位上输出闪烁速度控制寄存器值
+		write728x(0x15,(((i+1)&0xf0)/16)|0x10);
+		write728x(0x11,i+1);		// 更新闪烁速度寄存器
+		delay10ms(25);
+	}
+	delay10ms(200);
+	write728x(0x10,0xff);			// 停止闪烁
+	write728x(0x19,0xff);
+	write728x(0x11,0x40);			// 置闪烁寄存器为初始值
+
+// ***************************** 光柱译码测试 *****************************
+	for (i=0;i<=0x40;i++)
+	{
+		write728x(0x16,0x40-i);		// 光柱一递减显示
+		write728x(0x17,i);			// 光柱二递增显示
+		delay10ms(10);
+	}
+/*	for (i=0;i<=0x40;i++)
+	{
+		write728x(0x16,i);		// 光柱一递减显示
+		write728x(0x17,0x40-i);			// 光柱二递增显示
+		delay10ms(10);
+	}
+*/
+// ***************************** 段寻址测试 ******************************
+	write728x(0x17,0);				//  清 除 显 示
+	for (i=0;i<0x80;i++)			// 从第0段开始逐个点亮和熄灭
+	{
+		write728x(0x18,i);			// 段点亮
+		delay10ms(10);
+		write728x(0x18,i|0x80);		// 段熄灭
+	}
+// ******************************** 键盘测试 ****************************
+//	write728x(0x12,0x88);			// 设置为BMS=1, KMS=0
+//	write728x(0x19,0xff);
+//	write728x(8,0xf7);				// 在第8位显示"_"
+//	key_int();
+//	write728x(0x10,0xff);			// 停止闪烁
+	}
+}
+
+
+void key_int(void)
+{
+	unsigned long timer;
+	unsigned char n, kms;
+	while (1)
+	{
+		timer=0;
+		while(key && timer<0xf000)					// 等待按键
+		{
+			timer++;
+		}
+		if (timer>=0xf000)
+		{
+			n=read728x(0x19);
+			write728x(0x19,n|0x0f);
+			return;
+		}
+		key_number=read728x(0x13);	// 读键值
+		if (key_number==0x0f)
+		{
+			write728x(0x12,0x8c);
+		}
+		if (key_number==0x00)
+		{
+			write728x(0x12,0x88);
+		}
+		n=read728x(0x12);
+		if (n&0x04)
+		{
+			kms=1;
+		}	else
+			{
+				kms=0;
+			}
+		n=read728x(0x19);
+		write728x(0x19,n&0xf0);		//
+		write728x(0x15,0xb0+kms);	// 在DIG12上显示KMS值
+		write728x(0x14,0xaa);		// 在DIG11上显示"-"
+		write728x(0x15,0x90+(key_number&0xf0)/16);
+							// 在DIG10上以HEX译码方式显示键码的高4位
+		write728x(0x15,0x80+(key_number&0x0f));
+							// 在DIG9上以HEX译码方式显示键码的低4位
+		if (kms==1)
+		{
+			while (!key);
+		}
+	}
+		return;
+}
+
+// ***********************************************************
+// * 写入BC728X, 第一个参数为目标寄存器地址, 第二个参数为要写入的数据 *
+// ***********************************************************
+void write728x(unsigned char reg_add, unsigned char write_data)
+{
+	send_byte(reg_add);		// 发送寄存器地址
+	send_byte(write_data);	// 发送数据字节
+}
+
+// **********************************************************
+// *      读出 BC728X 内部寄存器的值, 调用参数为寄存器地址        *
+// **********************************************************
+unsigned char read728x(unsigned char reg_add)
+{
+	send_byte(reg_add|0x80);	// 发送读指令(bit7=1)
+	return(receive_byte());	// 接收数据字节并返回
+}
+
+// ***********************************************************
+// *                向 BC728X 发送一个字节                     *
+// ***********************************************************
+void send_byte(unsigned char send_byte)
+{
+	unsigned char bit_counter;
+	do {				// 产生clk 脉冲
+		clk=0;
+		clk=1;
+ 	} while (dat);		// 等待 BC728X 输出 dat 低电平响应
+	clk=0;			// 再次输出一 clk 脉冲
+	clk=1;
+	while (!dat);		// 等待 BC728X 进入接收状态
+	for (bit_counter=0;bit_counter<8;bit_counter++)
+	{			// 发送 8 个比特
+		if ((send_byte&0x80)==0)
+ 		{
+  			dat=0;// 如果待发bit为0, 置 dat 为 0
+  	 	}
+  	 	else
+  	 	{
+  	 		dat=1;		// 反之置为 1
+  	  	}
+ 		send_byte=send_byte*2;	// send_byte 左移一位
+		clk=0;			// 输出一 clk 脉冲
+		clk=1;
+		delay(3);		// 短暂延时
+	}
+	dat=1;				// 恢复 dat 为高电平
+	delay(5);
+}
+
+// ************************************************************
+// *                 从 BC728X 接收一个字节                     *
+// ************************************************************
+unsigned char receive_byte(void)
+{
+	unsigned char bit_counter, in_byte;
+	clk=0;			// 发出一 clk 脉冲
+	clk=1;
+	while (dat);		// 等待 BC728X 响应
+	clk=0;		// 收到响应, 再一脉冲等待接收数据
+	clk=1;
+	for (bit_counter=0;bit_counter<8;bit_counter++)
+	{			// 接收8个bit
+		delay(3);	// 短暂延时
+		in_byte=in_byte*2;	// in_byte 左移一位
+		if (dat)	// 如果 dat 为'1'
+		{
+			in_byte=in_byte|0x01;	// bit0=1
+		}
+		clk=0;		// 输出一 clk 脉冲
+		clk=1;
+	}
+	delay(5);
+	return(in_byte);
+}
+
+// ***********************************************************
+// *  短暂延时程序, 延时时间与参数time成正比, 范围是几个uS到几百个uS *
+// ***********************************************************
+void delay(unsigned char time)
+{
+	while (time!=0)
+	{
+		time--;
+	}
+}
+
+// ************************* 延时 n*10ms *************************
+void delay10ms(unsigned char time)
+{
+	unsigned char i;
+	unsigned int j;
+	for (i=0;i<time;i++)
+	{
+		for(j=0;j<0x390;j++)
+		{
+			if (!key)
+			{
+				key_int();
+			}
+		}
+	}
+}
+
